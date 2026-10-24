@@ -1,6 +1,6 @@
 <div align="center">
 
-# HomeFlow
+# HomeFlow(DEMO)
 
 ### Household coordination, from a conversation to an approved plan.
 
