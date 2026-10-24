@@ -1,5 +1,4 @@
-import type { Plan } from './types';
-import { getBedrockClient, type IntentExtractionResult } from './aws/bedrock';
+import { getBedrockClient } from './aws/bedrock';
 
 export interface ParsedRequest {
   guestCount: number;
@@ -8,7 +7,6 @@ export interface ParsedRequest {
   title?: string;
   description?: string;
 }
-
 export interface ParsedReminder {
   title: string;
   at: string;
@@ -197,51 +195,5 @@ function parseRequestDeterministic(message: string, now = new Date()): ParsedReq
     startsAt,
     eventType,
     title,
-  };
-}
-
-export function extractIntent(message: string): {
-  primaryIntent: 'create_plan' | 'add_task' | 'add_shopping' | 'check_status' | 'query';
-  confidence: number;
-  entities: Record<string, unknown>;
-} {
-  const lower = message.toLowerCase();
-
-  if (/\b(guest|host|prepare|plan|get ready|event|party|birthday|meeting|dinner)\b/.test(lower)) {
-    return {
-      primaryIntent: 'create_plan',
-      confidence: 0.9,
-      entities: {},
-    };
-  }
-
-  if (/\b(add|create|new)\s+(task|chore|todo|reminder)\b/.test(lower)) {
-    return {
-      primaryIntent: 'add_task',
-      confidence: 0.85,
-      entities: {},
-    };
-  }
-
-  if (/\b(add|buy|get|need)\s+(shopping|grocery|item|food)\b/.test(lower)) {
-    return {
-      primaryIntent: 'add_shopping',
-      confidence: 0.85,
-      entities: {},
-    };
-  }
-
-  if (/\b(status|what|how|show|list|pending|open)\b/.test(lower)) {
-    return {
-      primaryIntent: 'check_status',
-      confidence: 0.8,
-      entities: {},
-    };
-  }
-
-  return {
-    primaryIntent: 'query',
-    confidence: 0.5,
-    entities: {},
   };
 }

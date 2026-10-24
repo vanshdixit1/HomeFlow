@@ -119,4 +119,4 @@ Conflicts are shown with severity indicators:
 
 ## Local-only default
 
-The demo uses SQLite and deterministic planning without cloud credentials or service charges. Bedrock is disabled unless `HOMEFLOW_BEDROCK_ENABLED=true` is explicitly set; enabling it sends requests to AWS and may incur charges. DynamoDB is an unused adapter prototype, not the household store.
+The demo uses SQLite and deterministic planning without cloud credentials or service charges. Bedrock is disabled unless `HOMEFLOW_BEDROCK_ENABLED=true` is explicitly set; enabling it sends requests to AWS and may incur charges.

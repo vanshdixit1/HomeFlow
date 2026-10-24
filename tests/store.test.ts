@@ -24,11 +24,25 @@ test('create draft plan and duplicate prevention', () => {
   store.close();
 });
 
+test('draft deduplication keeps different event types separate', () => {
+  const store = new Store(':memory:');
+  const startsAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+  const dinner = store.draft(6, startsAt, 'dinner');
+  const birthday = store.draft(6, startsAt, 'birthday');
+  const duplicateBirthday = store.draft(6, startsAt, 'birthday');
+
+  assert.notEqual(dinner.id, birthday.id);
+  assert.equal(birthday.eventType, 'birthday');
+  assert.equal(duplicateBirthday.id, birthday.id);
+  store.close();
+});
+
 test('approve then execute persists actions', () => {
   const store = new Store(':memory:');
   const tomorrow = new Date(); tomorrow.setDate(tomorrow.getDate() + 1);
   tomorrow.setHours(19, 0, 0, 0);
   const plan = store.draft(6, tomorrow.toISOString());
+  store.createTask('Clean living room');
   const token = store.approve(plan.id, plan.version);
   assert.equal(typeof token, 'string');
   const executed = store.execute(plan.id, plan.version, token);
@@ -38,6 +52,7 @@ test('approve then execute persists actions', () => {
   const state = store.read();
   assert.ok(state.shopping.some(s => s.title === 'Pasta'));
   assert.ok(state.tasks.some(s => s.title === 'Clean living room'));
+  assert.equal(state.tasks.filter(s => s.title === 'Clean living room').length, 1);
   assert.ok(state.history.some(h => h.tool === 'execute_household_plan'));
   assert.equal(state.events.length, 1);
   store.close();
@@ -122,6 +137,9 @@ test('updateTask changes a matched task and leaves missing tasks untouched', () 
   assert.equal(store.updateTask(task.id, { status: 'open' })?.status, 'open');
   assert.equal(store.updateTask(task.id, { title: 'Clean the shed' })?.title, 'Clean the shed');
   assert.equal(store.updateTask('missing-task', { title: 'No change' }), undefined);
+  const otherTask = store.createTask('Wash dishes');
+  assert.throws(() => store.updateTask(otherTask.id, { title: 'Clean the shed' }), /already exists/);
+  assert.throws(() => store.updateTask(otherTask.id, { title: '  ' }), /title is required/);
   assert.ok(store.read().history.some(entry => entry.tool === 'update_task' && entry.status === 'success'));
   store.close();
 });
@@ -149,6 +167,39 @@ test('event updates preserve omitted fields and reject invalid time ranges', () 
   assert.equal(updated?.guestCount, 4);
   assert.throws(() => store.updateEvent(event.id, { endsAt: startsAt }), /after its start/);
   assert.throws(() => store.createEvent({ title: 'Invalid', startsAt: 'not a date', guestCount: 2, eventType: 'dinner', createdBy: 'test' }), /valid ISO/);
+  store.close();
+});
+
+test('event creation and updates honor actual durations and reject invalid conflicts', () => {
+  const store = new Store(':memory:');
+  const firstStart = Date.now() + 24 * 60 * 60 * 1000;
+  const first = store.createEvent({
+    title: '  Short event  ',
+    startsAt: new Date(firstStart).toISOString(),
+    endsAt: new Date(firstStart + 60 * 60 * 1000).toISOString(),
+    guestCount: 4,
+    eventType: 'dinner',
+    createdBy: 'test',
+  });
+  assert.equal(first.title, 'Short event');
+
+  const secondStart = firstStart + 90 * 60 * 1000;
+  const second = store.createEvent({
+    title: 'Second event',
+    startsAt: new Date(secondStart).toISOString(),
+    guestCount: 2,
+    eventType: 'meeting',
+    createdBy: 'test',
+  });
+
+  assert.throws(
+    () => store.updateEvent(second.id, { startsAt: new Date(firstStart + 30 * 60 * 1000).toISOString() }),
+    /Event conflicts/,
+  );
+  assert.equal(store.read().events.find(event => event.id === second.id)?.startsAt, new Date(secondStart).toISOString());
+  assert.throws(() => store.updateEvent(second.id, { guestCount: 0 }), /guest count/);
+  assert.throws(() => store.updateEvent(second.id, { title: '   ' }), /title is required/);
+
   store.close();
 });
 

@@ -63,8 +63,8 @@ HomeFlow is a self-hosted household coordination app. It turns natural-language 
 
 ```bash
 # Clone the repository
-git clone <repository-url>
-cd alexa+
+git clone https://github.com/vanshdixit1/HomeFlow.git
+cd HomeFlow
 
 # Install the locked dependency tree
 npm ci
@@ -171,8 +171,9 @@ The HomeFlow MCP server exposes the following tools:
 | `POST` | `/api/plan/reset` | Reset demo data; unavailable in production |
 | `POST` | `/api/auth/login` | Create a production session |
 | `POST` | `/api/auth/logout` | End the current session |
+| `GET`/`POST`/`DELETE` | `/api/mcp` | Stateless MCP Streamable HTTP adapter used on Vercel |
 
-The MCP server is also available at `/mcp` over Streamable HTTP. Its required tools and protocol version can be checked with `npm run mcp:smoke`.
+Locally, the MCP server is also available at `http://127.0.0.1:3001/mcp` over Streamable HTTP. On Vercel, omit `MCP_URL` so the web app uses the same deployment's `/api/mcp`. Required tools and protocol version can be checked with `npm run mcp:smoke` against the local Express server, or by posting JSON-RPC to `/api/mcp`.
 
 ## 📖 Usage Examples
 
@@ -289,6 +290,9 @@ Tasks (4):
 # Run unit tests
 npm test
 
+# Run ESLint
+npm run lint
+
 # Type checking
 npm run typecheck
 
@@ -302,6 +306,10 @@ HomeFlow uses the self-hosted MCP server track. Start the web app and server wit
 
 The web app also provides the simulated-experience path; its source code and working workflows are included in this repository.
 
+## Logging In
+
+Production uses one shared household password configured as `HOMEFLOW_ACCESS_PASSWORD`; there is no username, email account, or per-person login. Local development (`npm run dev`) bypasses the production login and opens the dashboard directly. If you do not know the deployed password, replace `HOMEFLOW_ACCESS_PASSWORD` in the Vercel project's Environment Variables with a new value of at least 16 characters, then redeploy. The CLI reports saved values as encrypted and does not reveal them. Keep the replacement password private.
+
 ## Production Deployment Status
 
 This repository is a self-hosted, single-household deployment—not a multi-tenant SaaS. In production, set `HOMEFLOW_ACCESS_PASSWORD` (at least 16 characters), `HOMEFLOW_SESSION_SECRET` (at least 32 characters), and `MCP_AUTH_TOKEN`. Use a TLS reverse proxy and inject these as deployment secrets; never commit them. The web app uses an HttpOnly, Secure, SameSite session cookie and the MCP endpoint requires bearer authentication. Configure the reverse proxy to overwrite client-supplied `X-Real-IP`/`X-Forwarded-For`; the included login throttle is process-local and must be replaced with a shared limiter for multiple instances. Before serving multiple homes, add individual accounts, tenant-scoped authorization/storage, managed relational persistence, backups/migrations, and a production deployment/monitoring pipeline. SQLite remains single-node and household state is not tenant-isolated.
@@ -312,9 +320,23 @@ Generate random secrets locally without sending them anywhere:
 node -e "console.log(require('node:crypto').randomBytes(32).toString('base64url'))"
 ```
 
-### Vercel
+### Vercel (authorized single-household demo)
 
-The Next.js app can be built for Vercel, but the Express MCP server is a separate long-running service and must be deployed separately with a stable HTTPS endpoint. Set `MCP_URL` to that endpoint and configure the same `MCP_AUTH_TOKEN` on both services, plus `HOMEFLOW_ACCESS_PASSWORD` and `HOMEFLOW_SESSION_SECRET` for the web deployment. Do not use the default SQLite file on Vercel serverless storage: its filesystem is not a durable shared database. Use persistent single-instance hosting for this SQLite demo, or complete a managed-database migration before scaling. This project has not been deployed to Vercel; no live URL is claimed.
+The Next.js app includes a serverless MCP adapter at `/api/mcp` using the MCP SDK's Web-standard Streamable HTTP transport. When `VERCEL_URL` is present and `MCP_URL` is omitted, the web app calls that same deployment's `/api/mcp` route. The long-running Express server in `server/index.ts` is for local development only; it does not listen when the module is imported by Next.js or Vercel.
+
+Configure these as Vercel project secrets (never commit them):
+
+- `HOMEFLOW_ACCESS_PASSWORD` (at least 16 characters)
+- `HOMEFLOW_SESSION_SECRET` (at least 32 random characters)
+- `MCP_AUTH_TOKEN` (random bearer token for `/api/mcp`)
+- `HOMEFLOW_BEDROCK_ENABLED=false`
+- omit `MCP_URL`
+
+**This is a single-household demo, not a product for thousands of homes.** On Vercel, SQLite is stored under `/tmp` (`tmpdir()` when `VERCEL=1`). That file is ephemeral, isolated per serverless instance, and not shared. Household data can reset across invocations. Durable multi-tenant storage, per-home authorization, backups, and a shared rate limiter are out of scope.
+
+**Live demo:** [https://homeflow-taupe-theta.vercel.app](https://homeflow-taupe-theta.vercel.app)
+
+The production deployment passed the login, household, natural-language task and shopping, task completion, plan draft/approval/execution, logout, reset protection, MCP protocol/tools, and responsive page checks. Its SQLite data remains ephemeral and may reset across serverless instances.
 
 ## 📊 Project Structure
 
@@ -326,6 +348,7 @@ homeflow/
 │   ├── globals.css          # Global styles
 │   └── api/                 # API routes
 │       ├── household/       # Household context endpoint
+│       ├── mcp/             # Serverless MCP Streamable HTTP adapter
 │       ├── message/         # Message parsing endpoint
 │       └── plan/            # Plan lifecycle endpoints
 ├── lib/                     # Core business logic
@@ -334,8 +357,7 @@ homeflow/
 │   ├── planner.ts           # Natural language parser
 │   ├── mcp-client.ts        # MCP client wrapper
 │   └── aws/                 # AWS integrations
-│       ├── bedrock.ts       # Amazon Bedrock client
-│       └── dynamodb.ts      # DynamoDB adapter
+│       └── bedrock.ts       # Optional Amazon Bedrock intent extraction
 ├── server/                  # MCP Server
 │   └── index.ts             # Express + MCP SDK server
 ├── skills/                  # Agent Skills
@@ -352,9 +374,6 @@ homeflow/
 
 ### Amazon Bedrock
 Bedrock is disabled by default and is not needed for the Alexa+ MCP or simulated-experience tracks. Setting `HOMEFLOW_BEDROCK_ENABLED=true` explicitly enables `InvokeModel` and may incur AWS charges. The no-cost demo uses the deterministic local parser.
-
-### Amazon DynamoDB
-`lib/aws/dynamodb.ts` is an adapter prototype only. The running application stores household data in SQLite; DynamoDB persistence is not wired into the app and is not claimed as a working integration.
 
 No AWS credentials, IAM Identity Center, or cloud account setup is needed for the local demo. Do not set `HOMEFLOW_BEDROCK_ENABLED=true` unless you intentionally want to use AWS and have reviewed its pricing.
 
@@ -376,6 +395,7 @@ Add new preference categories in `lib/types.ts` and update the assignment logic 
 - Member availability is not actively managed (preference-based only)
 - Conflict detection is time-based (doesn't check member schedules)
 - Event end times are estimated (3 hours by default)
+- Vercel demo data is ephemeral `/tmp` SQLite and is not shared across serverless instances
 
 ## 🔮 Future Roadmap
 

@@ -1,14 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-
-type Item = { id: string; title: string; detail: string; key: string; status?: string; scheduledAt?: string };
-type Step = { kind: 'shopping' | 'task' | 'reminder' | 'message' | 'inventory_check'; title: string; detail: string; key: string; assignedTo?: string; priority?: string };
-type Plan = { id: string; version: number; title: string; startsAt: string; guestCount: number; status: string; steps: Step[]; explanation: string; results: string[]; conflictWarnings?: string[]; reasoning?: string; eventType?: string };
-type Activity = { id: string; tool: string; status: string; summary: string; at: string };
-type Member = { id: string; name: string; role: string; preferredTasks: string[] };
-type Preference = { category: string; key: string; value: string };
-type Household = { id: string; name: string; timezone: string; members: Member[]; preferences: Preference[]; inventory: Item[]; tasks: Item[]; shopping: Item[]; reminders: Item[]; plans: Plan[]; events: any[]; history: Activity[] };
+import type { Household, Item, Plan, Step } from '../lib/types';
 type Message = { role: 'user' | 'assistant'; text: string; type?: string };
 
 const EXAMPLES = [
@@ -42,34 +35,39 @@ export default function Home() {
   const [authLoading, setAuthLoading] = useState(false);
   const [showOnboarding, setShowOnboarding] = useState(true);
 
-  const fetchHousehold = useCallback(async () => {
+  const fetchHousehold = useCallback(async (): Promise<Household | null> => {
     const res = await fetch('/api/household');
-    if (res.status === 401) {
-      setAuthenticated(false);
-      setHousehold(null);
-      return;
-    }
+    if (res.status === 401) return null;
     if (!res.ok) throw new Error('Could not load your household.');
-    setHousehold(await res.json());
-    setAuthenticated(true);
+    return await res.json() as Household;
   }, []);
 
+  const refreshHousehold = useCallback(async () => {
+    const data = await fetchHousehold();
+    if (!data) throw new Error('Authentication required. Please sign in again.');
+    setHousehold(data);
+    setAuthenticated(true);
+  }, [fetchHousehold]);
+
   useEffect(() => {
-    fetchHousehold().catch(err => {
-      setError(err.message);
-      setAuthenticated(false);
-      setAuthError('Unable to load the household service. Check your server configuration.');
-    });
-    // Check if user has seen onboarding
-    try {
-      const hasSeenOnboarding = localStorage.getItem('homeflow-onboarding-seen');
-      if (hasSeenOnboarding) {
-        setShowOnboarding(false);
+    fetchHousehold()
+      .then(data => {
+        setHousehold(data);
+        setAuthenticated(data !== null);
+      })
+      .catch(err => {
+        setError(err instanceof Error ? err.message : 'Could not load your household.');
+        setAuthenticated(false);
+        setAuthError('Unable to load the household service. Check your server configuration.');
+      });
+    const onboardingFrame = window.requestAnimationFrame(() => {
+      try {
+        if (localStorage.getItem('homeflow-onboarding-seen')) setShowOnboarding(false);
+      } catch {
+        // Onboarding remains visible when browser storage is unavailable.
       }
-    } catch (e) {
-      // localStorage not available during SSR
-      console.warn('localStorage not available:', e);
-    }
+    });
+    return () => window.cancelAnimationFrame(onboardingFrame);
   }, [fetchHousehold]);
 
   const post = async (path: string, body: unknown) => {
@@ -86,8 +84,7 @@ export default function Home() {
     try {
       await post('/api/auth/login', { password });
       setPassword('');
-      await fetchHousehold();
-      setAuthenticated(true);
+      await refreshHousehold();
     } catch (err) {
       setAuthError(err instanceof Error ? err.message : 'Sign in failed.');
     } finally { setAuthLoading(false); }
@@ -127,7 +124,7 @@ export default function Home() {
       } else {
         setMessages(prev => [...prev, { role: 'assistant', text: data.message || 'Done!' }]);
         setStatus('');
-        await fetchHousehold();
+        await refreshHousehold();
       }
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Something went wrong.';
@@ -157,7 +154,7 @@ export default function Home() {
       setPlan(prev => prev ? { ...prev, status: 'completed', results: data.results || [] } : null);
       setStatus('All approved actions were applied.');
       setMessages(prev => [...prev, { role: 'assistant', text: `Done. ${data.results?.length || 0} household updates are complete.`, type: 'success' }]);
-      await fetchHousehold();
+      await refreshHousehold();
     } catch (err) { setError(err instanceof Error ? err.message : 'Execution failed.'); setStatus('Execution failed · no changes were applied.'); }
     finally { setLoading(false); }
   };
@@ -173,7 +170,7 @@ export default function Home() {
   const handleReset = async () => {
     if (!confirm('Reset the demo household? Current plans and changes will be cleared.')) return;
     setLoading(true);
-    try { await post('/api/plan/reset', {}); setPlan(null); setToken(null); setMessages([]); setStatus('Demo household restored.'); setError(null); await fetchHousehold(); }
+    try { await post('/api/plan/reset', {}); setPlan(null); setToken(null); setMessages([]); setStatus('Demo household restored.'); setError(null); await refreshHousehold(); }
     catch (err) { setError(err instanceof Error ? err.message : 'Reset failed.'); }
     finally { setLoading(false); }
   };
@@ -182,7 +179,7 @@ export default function Home() {
     setUpdatingTaskId(task.id); setError(null);
     try {
       await post('/api/task/status', { id: task.id, status: task.status === 'completed' ? 'open' : 'completed' });
-      await fetchHousehold();
+      await refreshHousehold();
       setStatus(task.status === 'completed' ? 'Task reopened.' : 'Task completed.');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not update task.');
@@ -210,9 +207,9 @@ export default function Home() {
     return (
       <main className="home-shell auth-screen">
         <section className="auth-panel">
-          <div className="brand"><div className="brand-mark">H</div><div className="brand-name">Home<span>Flow</span></div></div>
+          <div className="brand"><div className="brand-mark">H</div><div className="brand-name">Home<span>Flow</span></div><span className="pill pending">Demo</span></div>
           <h1>Welcome back</h1>
-          <p>Sign in to your household.</p>
+          <p>Sign in to this single-household demo. Vercel storage is ephemeral and may reset.</p>
           {authError && <div className="status-banner error" role="alert">{authError}</div>}
           <form className="auth-form" onSubmit={handleLogin}>
             <label htmlFor="household-password">Household password</label>
@@ -237,7 +234,7 @@ export default function Home() {
               <div className="feature">
                 <span className="feature-icon">🎉</span>
                 <strong>Plan Events</strong>
-                <p>Describe any event and I'll create a complete preparation plan</p>
+                <p>Describe any event and I&apos;ll create a complete preparation plan</p>
               </div>
               <div className="feature">
                 <span className="feature-icon">🛒</span>
@@ -258,8 +255,8 @@ export default function Home() {
 
             <div className="onboarding-examples">
               <p className="examples-title">Try saying:</p>
-              {EXAMPLES.slice(0, 3).map((example, i) => (
-                <div key={i} className="example-bubble">"{example}"</div>
+              {EXAMPLES.slice(0, 3).map(example => (
+                <div key={example} className="example-bubble">&quot;{example}&quot;</div>
               ))}
             </div>
 
@@ -276,7 +273,7 @@ export default function Home() {
     <main className="home-shell">
       <div className="app-frame">
         <header className="topbar">
-          <div className="brand"><div className="brand-mark">H</div><div className="brand-name">Home<span>Flow</span></div></div>
+          <div className="brand"><div className="brand-mark">H</div><div className="brand-name">Home<span>Flow</span></div><span className="pill pending">Demo</span></div>
           <div className="top-actions">
             <button className="text-btn" onClick={() => setShowOnboarding(true)}>Help</button>
             <span className="live-dot">MCP connected</span>
@@ -366,7 +363,7 @@ export default function Home() {
         </div>
 
         <section className="lists"><ListCard title="Shopping list" items={household?.shopping || []} /><ListCard title="Open tasks" items={household?.tasks || []} onToggleTask={handleToggleTask} updatingTaskId={updatingTaskId} /><ListCard title="Reminders" items={household?.reminders || []} /></section>
-        <footer className="footer">HomeFlow · Event plans require approval; direct list requests apply immediately.</footer>
+        <footer className="footer">HomeFlow demo · Event plans require approval; direct list requests apply immediately. SQLite on Vercel lives in /tmp and is not durable across serverless invocations.</footer>
       </div>
     </main>
   );

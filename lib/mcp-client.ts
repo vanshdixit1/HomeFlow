@@ -1,10 +1,13 @@
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import { CallToolResultSchema } from '@modelcontextprotocol/sdk/types.js';
+
 export async function mcpCall(tool: string, args: Record<string, unknown> = {}) {
   const client = new Client({ name: 'homeflow-web', version: '0.1.0' });
+  const mcpUrl = process.env.MCP_URL
+    || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}/api/mcp` : 'http://127.0.0.1:3001/mcp');
   const transport = new StreamableHTTPClientTransport(
-    new URL(process.env.MCP_URL || 'http://127.0.0.1:3001/mcp'),
+    new URL(mcpUrl),
     {
       requestInit: {
         signal: AbortSignal.timeout(15_000),

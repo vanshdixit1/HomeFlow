@@ -56,7 +56,6 @@ test('production login issues a secure session and rejects an incorrect password
   Reflect.set(process.env, 'HOMEFLOW_ACCESS_PASSWORD', 'a sufficiently long test password');
   Reflect.set(process.env, 'HOMEFLOW_SESSION_SECRET', 'a sufficiently long test session secret 123');
   try {
-    let success: Response | undefined;
     for (let attempt = 0; attempt < 10; attempt++) {
       const failure = await login(new Request('https://homeflow.test/api/auth/login', {
         method: 'POST',
@@ -72,7 +71,7 @@ test('production login issues a secure session and rejects an incorrect password
     }));
     assert.equal(blocked.status, 429);
 
-    success = await login(new Request('https://homeflow.test/api/auth/login', {
+    const success = await login(new Request('https://homeflow.test/api/auth/login', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'x-real-ip': '198.51.100.11' },
       body: JSON.stringify({ password: 'a sufficiently long test password' }),

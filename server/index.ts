@@ -6,13 +6,9 @@ import { z } from 'zod';
 import { timingSafeEqual } from 'node:crypto';
 import { APPROVAL_TOKEN_TTL_MS, getStore } from '../lib/store';
 
-const store = getStore();
 const PORT = Number(process.env.MCP_PORT || 3001);
 const HOST = process.env.MCP_HOST || '127.0.0.1';
 const MCP_AUTH_TOKEN = process.env.MCP_AUTH_TOKEN;
-
-if (!Number.isInteger(PORT) || PORT < 1 || PORT > 65535) throw new Error('MCP_PORT must be an integer between 1 and 65535.');
-if (process.env.NODE_ENV === 'production' && !MCP_AUTH_TOKEN) throw new Error('MCP_AUTH_TOKEN is required in production.');
 
 const toolSchemas = {
   getInventory: z.object({}),
@@ -38,21 +34,21 @@ const toolSchemas = {
     planId: z.string().describe('Id of a pending plan.'),
   }),
   createTask: z.object({
-    title: z.string().min(1).describe('Title of the task.'),
-    detail: z.string().optional().describe('Optional detail (e.g. assignee).'),
-    assignedTo: z.string().optional().describe('Person assigned to the task.'),
+    title: z.string().trim().min(1).max(120).describe('Title of the task.'),
+    detail: z.string().max(500).optional().describe('Optional detail (e.g. assignee).'),
+    assignedTo: z.string().max(100).optional().describe('Person assigned to the task.'),
   }),
   updateTask: z.object({
     id: z.string().describe('Id of the task to update.'),
-    title: z.string().optional().describe('New title.'),
-    detail: z.string().optional().describe('New detail.'),
-    assignedTo: z.string().optional().describe('New assignee.'),
+    title: z.string().trim().min(1).max(120).optional().describe('New title.'),
+    detail: z.string().max(500).optional().describe('New detail.'),
+    assignedTo: z.string().max(100).optional().describe('New assignee.'),
     status: z.enum(['open', 'completed']).optional().describe('Open or completed task status.'),
   }),
   addShoppingItem: z.object({
-    name: z.string().min(1).describe('Name of the shopping item.'),
+    name: z.string().trim().min(1).max(120).describe('Name of the shopping item.'),
     quantity: z.number().int().positive().optional().describe('Available quantity.'),
-    detail: z.string().optional().describe('Optional detail.'),
+    detail: z.string().max(500).optional().describe('Optional detail.'),
   }),
   deleteShoppingItem: z.object({
     id: z.string().min(1).describe('Exact id of a shopping item to remove.'),
@@ -110,7 +106,8 @@ const toolSchemas = {
 };
 
 
-function getServer() {
+export function getServer() {
+  const store = getStore();
   const server = new McpServer({ name: 'homeflow-household', version: '1.0.0' }, { capabilities: { logging: {} } });
 
   server.registerTool('get_household_context', { description: 'Returns the household context: members, preferences, inventory, tasks, shopping, reminders, plans, events, and history.', inputSchema: toolSchemas.getHouseholdContext }, async () => {
@@ -170,7 +167,7 @@ function getServer() {
   });
 
   server.registerTool('cancel_household_plan', { description: 'Cancels an unexecuted pending or approved plan.', inputSchema: toolSchemas.cancelHouseholdPlan }, async ({ planId }) => {
-    const plan = store.cancel(planId);
+    store.cancel(planId);
     store.log('cancel_household_plan', 'success', `Cancelled plan ${planId}.`);
     return { content: [{ type: 'text', text: JSON.stringify({ planId, status: 'cancelled' }, null, 2) }] };
   });
@@ -259,75 +256,81 @@ function getServer() {
 }
 
 
-const app = express();
-app.disable('x-powered-by');
-const defaultOrigins = process.env.NODE_ENV === 'production'
-  ? []
-  : ['http://localhost:3000', 'http://127.0.0.1:3000'];
-const allowedOrigins = new Set((process.env.MCP_ALLOWED_ORIGINS || defaultOrigins.join(','))
-  .split(',')
-  .map(origin => origin.trim())
-  .filter(Boolean));
-app.use(cors({
-  origin(origin, callback) {
-    callback(null, !origin || allowedOrigins.has(origin));
-  },
-  optionsSuccessStatus: 204,
-}));
-app.use(express.json({ limit: '64kb' }));
-app.use('/mcp', (req, res, next) => {
-  if (!MCP_AUTH_TOKEN || req.method === 'OPTIONS') return next();
-  const authorization = req.get('authorization') || '';
-  const supplied = authorization.startsWith('Bearer ') ? authorization.slice(7) : '';
-  const suppliedBytes = Buffer.from(supplied);
-  const expectedBytes = Buffer.from(MCP_AUTH_TOKEN);
-  if (suppliedBytes.length !== expectedBytes.length || !timingSafeEqual(suppliedBytes, expectedBytes)) {
-    return res.status(401).json({ error: 'Unauthorized.' });
-  }
-  next();
-});
-
-app.get('/healthz', (_req, res) => res.json({ ok: true }));
-app.get('/readyz', (_req, res) => {
-  try {
-    store.read();
-    res.json({ ok: true });
-  } catch {
-    res.status(503).json({ ok: false });
-  }
-});
-
-app.post('/mcp', async (req, res) => {
-  const server = getServer();
-  try {
-    const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
-    await server.connect(transport);
-    await transport.handleRequest(req, res, req.body);
-    res.on('close', () => { transport.close(); server.close(); });
-  } catch (error) {
-    console.error('MCP request error:', error);
-    if (!res.headersSent) res.status(500).json({ jsonrpc: '2.0', error: { code: -32603, message: 'Internal server error' }, id: null });
-  }
-});
-
-app.get('/mcp', async (req, res) => {
-  res.writeHead(405).end(JSON.stringify({ jsonrpc: '2.0', error: { code: -32000, message: 'Method not allowed.' }, id: null }));
-});
-
-app.delete('/mcp', async (req, res) => {
-  res.writeHead(405).end(JSON.stringify({ jsonrpc: '2.0', error: { code: -32000, message: 'Method not allowed.' }, id: null }));
-});
-
-const httpServer = app.listen(PORT, HOST, () => console.log(`HomeFlow MCP server listening on http://${HOST}:${PORT}/mcp`));
-let shuttingDown = false;
-const shutdown = () => {
-  if (shuttingDown) return;
-  shuttingDown = true;
-  console.log('Shutting down...');
-  httpServer.close(() => {
-    store.close();
-    process.exit(0);
+const isDirectExecution = /(?:^|[\\/])server[\\/]index\.(?:ts|js)$/.test(process.argv[1] || '');
+if (isDirectExecution) {
+  const app = express();
+  app.disable('x-powered-by');
+  const defaultOrigins = process.env.NODE_ENV === 'production'
+    ? []
+    : ['http://localhost:3000', 'http://127.0.0.1:3000'];
+  const allowedOrigins = new Set((process.env.MCP_ALLOWED_ORIGINS || defaultOrigins.join(','))
+    .split(',')
+    .map(origin => origin.trim())
+    .filter(Boolean));
+  app.use(cors({
+    origin(origin, callback) {
+      callback(null, !origin || allowedOrigins.has(origin));
+    },
+    optionsSuccessStatus: 204,
+  }));
+  app.use(express.json({ limit: '64kb' }));
+  app.use('/mcp', (req, res, next) => {
+    if (!MCP_AUTH_TOKEN || req.method === 'OPTIONS') return next();
+    const authorization = req.get('authorization') || '';
+    const supplied = authorization.startsWith('Bearer ') ? authorization.slice(7) : '';
+    const suppliedBytes = Buffer.from(supplied);
+    const expectedBytes = Buffer.from(MCP_AUTH_TOKEN);
+    if (suppliedBytes.length !== expectedBytes.length || !timingSafeEqual(suppliedBytes, expectedBytes)) {
+      return res.status(401).json({ error: 'Unauthorized.' });
+    }
+    next();
   });
-};
-process.once('SIGINT', shutdown);
-process.once('SIGTERM', shutdown);
+
+  app.get('/healthz', (_req, res) => res.json({ ok: true }));
+  app.get('/readyz', (_req, res) => {
+    try {
+      getStore().read();
+      res.json({ ok: true });
+    } catch {
+      res.status(503).json({ ok: false });
+    }
+  });
+
+  app.post('/mcp', async (req, res) => {
+    const server = getServer();
+    try {
+      const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
+      await server.connect(transport);
+      await transport.handleRequest(req, res, req.body);
+      res.on('close', () => { transport.close(); server.close(); });
+    } catch (error) {
+      console.error('MCP request error:', error);
+      if (!res.headersSent) res.status(500).json({ jsonrpc: '2.0', error: { code: -32603, message: 'Internal server error' }, id: null });
+    }
+  });
+
+  app.get('/mcp', async (_req, res) => {
+    res.writeHead(405).end(JSON.stringify({ jsonrpc: '2.0', error: { code: -32000, message: 'Method not allowed.' }, id: null }));
+  });
+
+  app.delete('/mcp', async (_req, res) => {
+    res.writeHead(405).end(JSON.stringify({ jsonrpc: '2.0', error: { code: -32000, message: 'Method not allowed.' }, id: null }));
+  });
+
+  const store = getStore();
+  if (!Number.isInteger(PORT) || PORT < 1 || PORT > 65535) throw new Error('MCP_PORT must be an integer between 1 and 65535.');
+  if (process.env.NODE_ENV === 'production' && !MCP_AUTH_TOKEN) throw new Error('MCP_AUTH_TOKEN is required in production.');
+  const httpServer = app.listen(PORT, HOST, () => console.log(`HomeFlow MCP server listening on http://${HOST}:${PORT}/mcp`));
+  let shuttingDown = false;
+  const shutdown = () => {
+    if (shuttingDown) return;
+    shuttingDown = true;
+    console.log('Shutting down...');
+    httpServer.close(() => {
+      store.close();
+      process.exit(0);
+    });
+  };
+  process.once('SIGINT', shutdown);
+  process.once('SIGTERM', shutdown);
+}

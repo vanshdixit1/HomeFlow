@@ -11,13 +11,12 @@
     "mcp:smoke": "tsx scripts/smoke-mcp.ts",
     "build": "next build",
     "start": "next start",
+    "lint": "eslint app lib scripts server tests eslint.config.mjs",
     "typecheck": "tsc --noEmit",
     "test": "tsx --test tests/*.test.ts"
   },
   "dependencies": {
     "@aws-sdk/client-bedrock-runtime": "^3.745.0",
-    "@aws-sdk/client-dynamodb": "^3.745.0",
-    "@aws-sdk/lib-dynamodb": "^3.745.0",
     "@modelcontextprotocol/sdk": "1.32.1",
     "cors": "^2.8.6",
     "express": "5.3.0",
@@ -33,6 +32,8 @@
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
     "concurrently": "^9.0.0",
+    "eslint": "^9.39.5",
+    "eslint-config-next": "^16.4.2",
     "tsx": "4.23.15",
     "typescript": "^5.9.0"
   }

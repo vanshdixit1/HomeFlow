@@ -99,55 +99,6 @@ export class BedrockClient {
     }
   }
 
-  async generatePlanExplanation(
-    eventType: string,
-    guestCount: number,
-    context: Record<string, unknown>
-  ): Promise<string | null> {
-    if (!this.enabled || !this.client) {
-      return null;
-    }
-
-    try {
-      const prompt = `Generate a concise explanation for a household preparation plan.
-Event type: ${eventType}
-Guest count: ${guestCount}
-Context: ${JSON.stringify(context)}
-
-Generate a 2-3 sentence explanation that mentions:
-- What was checked (preferences, inventory, existing tasks)
-- Any relevant dietary restrictions
-- Key items that need attention
-
-Keep it professional and helpful.`;
-
-      const command = new InvokeModelCommand({
-        modelId: this.modelId,
-        contentType: 'application/json',
-        accept: 'application/json',
-        body: JSON.stringify({
-          anthropic_version: 'bedrock-2023-05-31',
-          max_tokens: 300,
-          messages: [
-            {
-              role: 'user',
-              content: prompt,
-            },
-          ],
-        }),
-      });
-
-      const response = await this.client.send(command);
-      const responseBody = new TextDecoder().decode(response.body);
-      const parsed = JSON.parse(responseBody);
-
-      return parsed.content?.[0]?.text || null;
-    } catch (error) {
-      console.error('Bedrock plan generation failed:', error);
-      return null;
-    }
-  }
-
   isEnabled(): boolean {
     return this.enabled;
   }

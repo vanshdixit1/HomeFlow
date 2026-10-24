@@ -194,7 +194,14 @@ export function analyzeIntent(message: string): EnhancedIntent {
   };
 }
 
-export function generateHelpfulResponse(intent: EnhancedIntent, household?: any): string {
+type HouseholdSummary = {
+  members?: readonly unknown[];
+  tasks?: readonly { title: string; status?: string }[];
+  shopping?: readonly { title: string }[];
+  reminders?: readonly { title: string }[];
+};
+
+export function generateHelpfulResponse(intent: EnhancedIntent, household?: HouseholdSummary): string {
   switch (intent.type) {
     case 'create_plan':
       return intent.clarification
@@ -217,10 +224,10 @@ export function generateHelpfulResponse(intent: EnhancedIntent, household?: any)
         : "I'll set up that reminder for you.";
 
     case 'check_status':
-      const tasks = (household?.tasks || []).filter((task: { status?: string }) => task.status !== 'completed');
+      const tasks = (household?.tasks || []).filter(task => task.status !== 'completed');
       const shopping = household?.shopping || [];
       const reminders = household?.reminders || [];
-      const describe = (items: Array<{ title: string }>) => items.length ? items.map(item => item.title).join(', ') : 'none';
+      const describe = (items: readonly { title: string }[]) => items.length ? items.map(item => item.title).join(', ') : 'none';
       return `Household status: ${tasks.length} open task${tasks.length === 1 ? '' : 's'} (${describe(tasks)}); ${shopping.length} shopping item${shopping.length === 1 ? '' : 's'} (${describe(shopping)}); ${reminders.length} reminder${reminders.length === 1 ? '' : 's'} (${describe(reminders)}).`;
 
     case 'general_query':

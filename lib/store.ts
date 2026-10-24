@@ -1,6 +1,7 @@
 import { DatabaseSync } from 'node:sqlite';
 import { mkdirSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
+import { tmpdir } from 'node:os';
 import { createHash, randomUUID } from 'node:crypto';
 import type { Household, Plan, Step, Item, Activity, Member, Event, Preference } from './types';
 
@@ -39,7 +40,8 @@ export function seed(): Household {
 
 export class Store {
   private db: DatabaseSync;
-  constructor(path = process.env.HOMEFLOW_DB || resolve(process.cwd(), 'data/homeflow.sqlite')) {
+  // Vercel sets VERCEL=1 and tmpdir() is /tmp; that SQLite file is ephemeral and not shared across instances.
+  constructor(path = process.env.HOMEFLOW_DB || (process.env.VERCEL === '1' ? resolve(tmpdir(), 'homeflow-demo.sqlite') : resolve(process.cwd(), 'data/homeflow.sqlite'))) {
     if (path !== ':memory:') mkdirSync(dirname(path), { recursive: true });
     this.db = new DatabaseSync(path);
     this.db.exec('PRAGMA journal_mode=WAL; PRAGMA busy_timeout=5000; CREATE TABLE IF NOT EXISTS household (id INTEGER PRIMARY KEY, body TEXT NOT NULL); CREATE TABLE IF NOT EXISTS approvals (plan_id TEXT PRIMARY KEY, version INTEGER NOT NULL, token_hash TEXT NOT NULL, expires_at INTEGER NOT NULL DEFAULT 0);');
@@ -82,14 +84,15 @@ export class Store {
     return this.read();
   }
 
-  detectConflicts(guestCount: number, startsAt: string): string[] {
+  detectConflicts(guestCount: number, startsAt: string, endsAt?: string, excludedEventId?: string): string[] {
     const conflicts: string[] = [];
     const state = this.read();
     const startTime = new Date(startsAt);
-    const endTime = new Date(startTime.getTime() + 3 * 60 * 60 * 1000); // Assume 3 hour event
+    const endTime = endsAt ? new Date(endsAt) : new Date(startTime.getTime() + 3 * 60 * 60 * 1000);
 
     // Check for time conflicts with existing events
     for (const event of state.events) {
+      if (event.id === excludedEventId) continue;
       if (event.status === 'cancelled') continue;
       const eventStart = new Date(event.startsAt);
       const eventEnd = event.endsAt ? new Date(event.endsAt) : new Date(eventStart.getTime() + 3 * 60 * 60 * 1000);
@@ -155,14 +158,14 @@ export class Store {
     const conflicts = this.detectConflicts(guestCount, startsAt);
 
     return this.transaction(state => {
-      const existing = state.plans.find(p => p.startsAt === instant && p.guestCount === guestCount && p.status !== 'cancelled');
+      const existing = state.plans.find(p => p.startsAt === instant && p.guestCount === guestCount && p.eventType === eventType && p.status !== 'cancelled');
       if (existing) return existing;
 
       const dateKey = instant;
       const assignedTo = this.assignTaskToMember('shopping');
 
       // Generate shopping based on event type
-      const shoppingItems = this.getShoppingItemsForEvent(eventType, guestCount);
+      const shoppingItems = this.getShoppingItemsForEvent(eventType);
       const shopping: Step[] = shoppingItems.map(title => ({
         kind: 'shopping' as const, title, detail: `Enough for ${guestCount} guests · ${assignedTo}`, key: `${dateKey}:shopping:${title.toLowerCase()}`,
       }));
@@ -202,7 +205,7 @@ export class Store {
     });
   }
 
-  private getShoppingItemsForEvent(eventType: string, guestCount: number): string[] {
+  private getShoppingItemsForEvent(eventType: Event['eventType']): string[] {
     const baseItems = ['Pasta', 'Tomato sauce', 'Salad ingredients', 'Peanut-free dessert'];
 
     switch (eventType) {
@@ -217,7 +220,7 @@ export class Store {
     }
   }
 
-  private getTasksForEvent(eventType: string): string[] {
+  private getTasksForEvent(eventType: Event['eventType']): string[] {
     const baseTasks = ['Clean living room', 'Prepare dining table', 'Check guest bathroom'];
 
     switch (eventType) {
@@ -232,7 +235,7 @@ export class Store {
     }
   }
 
-  private getEventTitle(eventType: string, guestCount: number): string {
+  private getEventTitle(eventType: Event['eventType'], guestCount: number): string {
     switch (eventType) {
       case 'birthday':
         return `Birthday celebration for ${guestCount} guests`;
@@ -240,8 +243,12 @@ export class Store {
         return `Party with ${guestCount} guests`;
       case 'meeting':
         return `Meeting with ${guestCount} attendees`;
-      default:
+      case 'other':
+        return `Event with ${guestCount} guests`;
+      case 'dinner':
         return `Dinner with ${guestCount} guests`;
+      default:
+        return `Event with ${guestCount} guests`;
     }
   }
 
@@ -287,7 +294,10 @@ export class Store {
 
       for (const step of plan.steps) {
         const list = step.kind === 'shopping' ? state.shopping : step.kind === 'task' ? state.tasks : state.reminders;
-        if (list.some(item => item.key === step.key)) {
+        const normalizedTitle = step.title.trim().toLowerCase();
+        const alreadyExists = list.some(item => item.key === step.key
+          || ((step.kind === 'shopping' || step.kind === 'task') && item.title.trim().toLowerCase() === normalizedTitle));
+        if (alreadyExists) {
           plan.results.push(`Already exists: ${step.title}`);
           continue;
         }
@@ -341,7 +351,13 @@ export class Store {
         this.appendLog(state, 'update_task', 'error', `Task not found: ${id}`);
         return task;
       }
-      if (patch.title !== undefined) task.title = patch.title;
+      if (patch.title !== undefined) {
+        const title = patch.title.trim();
+        if (!title) throw new Error('Task title is required.');
+        const duplicate = state.tasks.some(item => item.id !== id && item.title.trim().toLowerCase() === title.toLowerCase());
+        if (duplicate) throw new Error('A task with that title already exists.');
+        task.title = title;
+      }
       if (patch.detail !== undefined) task.detail = patch.detail;
       if (patch.assignedTo !== undefined) task.detail = `${patch.assignedTo} · ${task.detail.split(' · ').slice(1).join(' · ') || 'open'}`;
       if (patch.status !== undefined) task.status = patch.status;
@@ -415,21 +431,23 @@ export class Store {
 
   createEvent(event: Omit<Event, 'id' | 'status' | 'createdAt'>): Event {
     const startsAt = Date.parse(event.startsAt);
-    if (!event.title.trim()) throw new Error('Event title is required.');
+    const title = event.title.trim();
+    if (!title) throw new Error('Event title is required.');
     if (!Number.isFinite(startsAt)) throw new Error('Event start time must be a valid ISO-8601 date.');
-    if (!Number.isInteger(event.guestCount) || event.guestCount < 1) throw new Error('Event guest count must be a positive integer.');
+    if (!Number.isInteger(event.guestCount) || event.guestCount < 1 || event.guestCount > 1000) throw new Error('Event guest count must be between 1 and 1000.');
     if (event.endsAt) {
       const endsAt = Date.parse(event.endsAt);
       if (!Number.isFinite(endsAt) || endsAt <= startsAt) throw new Error('Event end time must be after its start time.');
     }
     return this.transaction(state => {
-      const conflicts = this.detectConflicts(event.guestCount, event.startsAt);
+      const conflicts = this.detectConflicts(event.guestCount, event.startsAt, event.endsAt);
       if (conflicts.length > 0) {
         throw new Error(`Event conflicts: ${conflicts.join('; ')}`);
       }
 
       const newEvent: Event = {
         ...event,
+        title,
         id: randomUUID(),
         status: 'planned',
       };
@@ -447,13 +465,18 @@ export class Store {
         return undefined;
       }
 
+      if (updates.title !== undefined && !updates.title.trim()) throw new Error('Event title is required.');
       if (updates.startsAt !== undefined && !Number.isFinite(Date.parse(updates.startsAt))) throw new Error('Event start time must be valid.');
-      if (updates.endsAt !== undefined && updates.endsAt !== null && !Number.isFinite(Date.parse(updates.endsAt))) throw new Error('Event end time must be valid.');
+      if (updates.endsAt !== undefined && !Number.isFinite(Date.parse(updates.endsAt))) throw new Error('Event end time must be valid.');
       const nextStartsAt = updates.startsAt ?? event.startsAt;
       const nextEndsAt = updates.endsAt ?? event.endsAt;
+      const nextGuestCount = updates.guestCount ?? event.guestCount;
+      if (!Number.isInteger(nextGuestCount) || nextGuestCount < 1 || nextGuestCount > 1000) throw new Error('Event guest count must be between 1 and 1000.');
       if (nextEndsAt && Date.parse(nextEndsAt) <= Date.parse(nextStartsAt)) throw new Error('Event end time must be after its start time.');
+      const conflicts = this.detectConflicts(nextGuestCount, nextStartsAt, nextEndsAt, id);
+      if (conflicts.length > 0) throw new Error(`Event conflicts: ${conflicts.join('; ')}`);
       for (const [key, value] of Object.entries(updates)) {
-        if (value !== undefined) Object.assign(event, { [key]: value });
+        if (value !== undefined) Object.assign(event, { [key]: key === 'title' && typeof value === 'string' ? value.trim() : value });
       }
       this.appendLog(state, 'update_event', 'success', `Event updated: ${event.title}`);
       return event;
