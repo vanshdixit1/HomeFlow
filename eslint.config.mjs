@@ -8,7 +8,6 @@ export default defineConfig([
   globalIgnores([
     '.git/**',
     '.devin/**',
-    '.aider*',
     '.next/**',
     '.vercel/**',
     'out/**',

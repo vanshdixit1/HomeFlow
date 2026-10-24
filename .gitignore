@@ -22,6 +22,3 @@ Thumbs.db
 *.key
 *.crt
 next-env.d.ts
-.aider*
-.vercel/
-.env*.local

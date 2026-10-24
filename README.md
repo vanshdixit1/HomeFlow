@@ -1,427 +1,232 @@
+<div align="center">
+
 # HomeFlow
 
-**Your household, coordinated.**
+### Household coordination, from a conversation to an approved plan.
 
-HomeFlow is a self-hosted household coordination app. It turns natural-language requests into event plans, tasks, shopping-list updates, and reminders, with explicit approval before multi-action event plans are executed.
+Turn everyday requests into shared tasks, shopping lists, reminders, and event plans. Review proposed plans before execution, with household data and actions exposed through the Model Context Protocol (MCP).
 
-## 🎯 Features
+[![Live demo](https://img.shields.io/badge/Live%20demo-Open%20HomeFlow-207252?style=for-the-badge)](https://homeflow-taupe-theta.vercel.app)
+[![CI](https://github.com/vanshdixit1/HomeFlow/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/vanshdixit1/HomeFlow/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-1f6feb.svg)](LICENSE)
+[![Node.js 24+](https://img.shields.io/badge/Node.js-24%2B-339933?logo=node.js&logoColor=white)](https://nodejs.org/)
 
-- **Natural Language Planning**: Describe events in plain English (e.g., "We're hosting six guests tomorrow at 7 PM")
-- **Multi-Event Support**: Handle dinners, birthday parties, meetings, and custom events
-- **Intelligent Task Assignment**: Automatically assign tasks based on household preferences
-- **Conflict Detection**: Identify scheduling conflicts and resource limitations
-- **Approval-Gated Event Plans**: Event plans require explicit approval; direct task and shopping requests apply immediately
-- **Interactive Tasks**: Complete and reopen household tasks from the dashboard
-- **Scheduled Reminders**: Store future reminder times and prevent duplicates (delivery is not included)
-- **Household Memory**: Remembers preferences, assignments, and dietary restrictions
-- **MCP Integration**: Full Model Context Protocol server with Streamable HTTP transport
-- **No-cloud default**: Local SQLite and deterministic planning require no AWS account or service charges
-- **Local Fallback**: Works completely offline with SQLite and deterministic planning
+[Launch the live demo](https://homeflow-taupe-theta.vercel.app) · [Report a bug](https://github.com/vanshdixit1/HomeFlow/issues) · [Contribute](CONTRIBUTING.md)
 
-## 🏗️ Architecture
-
-```
-┌─────────────────────────┐
-│   Web Dashboard (Next.js)│
-│   - Conversation UI     │
-│   - Plan Review         │
-│   - Household Dashboard │
-└────────────┬────────────┘
-             │
-             │ HTTP API
-             ▼
-┌─────────────────────────┐
-│   MCP Client            │
-│   Streamable HTTP       │
-└────────────┬────────────┘
-             │
-             │ MCP Protocol
-             ▼
-┌─────────────────────────┐
-│   HomeFlow MCP Server   │
-│   - Express + MCP SDK   │
-│   - Tool Registration   │
-│   - Approval System     │
-└────────────┬────────────┘
-             │
-     ┌───────┴────────┐
-     ▼                ▼
-┌──────────┐   ┌──────────────┐
-│ SQLite   │   │ AWS (Optional)│
-│ Store    │   │ - Bedrock    │
-│          │   │ - InvokeModel│
-└──────────┘   └──────────────┘
-```
-
-## Screenshots
-
-> Screenshot placeholder: add a dashboard image under `docs/screenshots/` before publishing a live demo.
-
-> Demo GIF placeholder: add a short event-planning and approval walkthrough under `docs/screenshots/` when captured.
-
-## 📦 Installation
-
-```bash
-# Clone the repository
-git clone https://github.com/vanshdixit1/HomeFlow.git
-cd HomeFlow
-
-# Install the locked dependency tree
-npm ci
-
-# Copy environment configuration (PowerShell)
-Copy-Item .env.example .env
-
-# No AWS setup is required for the local demo.
-```
-
-## 🚀 Running the Application
-
-### Development Mode
-
-```bash
-# Start both Next.js web app and MCP server
-npm run dev
-
-# The web app will be available at http://localhost:3000
-# The MCP server will be available at http://localhost:3001/mcp
-
-# In a second terminal, verify the protocol version and required tools
-npm run mcp:smoke
-```
-
-### Production Mode
-
-```bash
-# Build the Next.js app
-npm run build
-
-# Start the production server
-npm start
-
-# Start the MCP server separately
-npm run mcp
-```
-
-### MCP Server Only
-
-```bash
-npm run mcp
-```
-
-## 🔧 Environment Variables
-
-Create a `.env` file in the project root:
-
-```bash
-# MCP Configuration
-MCP_PORT=3001
-MCP_URL=http://127.0.0.1:3001/mcp
-
-# Database (Optional - defaults to data/homeflow.sqlite)
-HOMEFLOW_DB=/path/to/database.sqlite
-
-# Keep cloud services disabled for the no-cost local demo.
-HOMEFLOW_BEDROCK_ENABLED=false
-```
-
-## 🛠️ MCP Tools
-
-The HomeFlow MCP server exposes the following tools:
-
-### Context Tools
-- `get_household_context` - Full household state (members, preferences, inventory, tasks, shopping, reminders, plans, events, history)
-- `get_open_tasks` - List open household tasks
-- `get_shopping_list` - List shopping items
-- `get_upcoming_events` - List future events and plans
-- `get_inventory` - List household inventory
-- `get_action_history` - Audit log of recent actions
-
-### Planning Tools
-- `create_household_plan` - Draft a preparation plan (guest count, start time, event type)
-- `approve_household_plan` - Approve a draft plan (returns execution token)
-- `execute_household_plan` - Execute an approved plan (requires token)
-- `cancel_household_plan` - Cancel a pending plan
-
-### Action Tools
-- `create_task` - Create a household task (with duplicate detection)
-- `update_task` - Update an existing task
-- `add_shopping_item` - Add shopping item (with duplicate detection)
-- `delete_shopping_item` - Remove a specific shopping item by id
-- `schedule_reminder` - Schedule a future reminder
-- `request_member_confirmation` - Request confirmation from a household member
-
-### Management Tools
-- `create_event` - Create a new event (with conflict detection)
-- `update_event` - Update an existing event
-- `delete_event` - Delete an event
-- `add_preference` - Add a household preference
-- `update_member` - Update a household member
-
-## HTTP API
-
-| Method | Route | Purpose |
-| --- | --- | --- |
-| `GET` | `/api/household` | Read household state; production requires a session |
-| `POST` | `/api/message` | Parse and handle a natural-language request |
-| `POST` | `/api/task/status` | Complete or reopen a task |
-| `POST` | `/api/plan/approve` | Approve a plan version |
-| `POST` | `/api/plan/execute` | Execute an approved plan with its token |
-| `POST` | `/api/plan/cancel` | Cancel a pending/approved plan |
-| `POST` | `/api/plan/reset` | Reset demo data; unavailable in production |
-| `POST` | `/api/auth/login` | Create a production session |
-| `POST` | `/api/auth/logout` | End the current session |
-| `GET`/`POST`/`DELETE` | `/api/mcp` | Stateless MCP Streamable HTTP adapter used on Vercel |
-
-Locally, the MCP server is also available at `http://127.0.0.1:3001/mcp` over Streamable HTTP. On Vercel, omit `MCP_URL` so the web app uses the same deployment's `/api/mcp`. Required tools and protocol version can be checked with `npm run mcp:smoke` against the local Express server, or by posting JSON-RPC to `/api/mcp`.
-
-## 📖 Usage Examples
-
-### Example 1: Dinner Preparation
-
-**Request**: "We're hosting six guests tomorrow at 7 PM. Help me get the house ready."
-
-**HomeFlow Response**:
-```
-I checked your household context and prepared a draft plan.
-
-Event: Dinner with 6 guests
-Time: Tomorrow at 7:00 PM
-Type: dinner
-
-Shopping items (4):
-- Pasta (enough for 6 guests · Vansh)
-- Tomato sauce (enough for 6 guests · Vansh)
-- Salad ingredients (enough for 6 guests · Vansh)
-- Peanut-free dessert (enough for 6 guests · Vansh)
-
-Tasks (3):
-- Clean living room (Anika · before event)
-- Prepare dining table (Anika · before event)
-- Check guest bathroom (Anika · before event)
-
-Reminder:
-- Start guest preparation (3 hours before event)
-
-Checked household preferences: Vegetarian menu preferred, No peanuts.
-Available: Dinner plates (12 available), Sparkling water (8 bottles).
-
-[Approve plan] [Cancel]
-```
-
-### Example 2: Birthday Party
-
-**Request**: "We're having a birthday party for 8 guests tomorrow at 5 PM."
-
-**HomeFlow Response**:
-```
-Event: Birthday celebration for 8 guests
-Time: Tomorrow at 5:00 PM
-Type: birthday
-
-Shopping items (7):
-- Pasta (enough for 8 guests · Vansh)
-- Tomato sauce (enough for 8 guests · Vansh)
-- Salad ingredients (enough for 8 guests · Vansh)
-- Peanut-free dessert (enough for 8 guests · Vansh)
-- Birthday cake (enough for 8 guests · Vansh)
-- Candles (enough for 8 guests · Vansh)
-- Balloons (enough for 8 guests · Vansh)
-
-Tasks (6):
-- Clean living room (Anika · before event)
-- Prepare dining table (Anika · before event)
-- Check guest bathroom (Anika · before event)
-- Set up decorations (Anika · before event)
-- Prepare cake area (Anika · before event)
-- Arrange music (Anika · before event)
-
-[Approve plan] [Cancel]
-```
-
-### Example 3: Meeting Setup
-
-**Request**: "We need a meeting with 5 attendees tomorrow at 2 PM."
-
-**HomeFlow Response**:
-```
-Event: Meeting with 5 attendees
-Time: Tomorrow at 2:00 PM
-Type: meeting
-
-Shopping items (5):
-- Coffee (enough for 5 attendees · Vansh)
-- Tea (enough for 5 attendees · Vansh)
-- Light snacks (enough for 5 attendees · Vansh)
-- Water (enough for 5 attendees · Vansh)
-- Notebooks/pens (enough for 5 attendees · Vansh)
-
-Tasks (4):
-- Clean meeting area (Anika · before event)
-- Set up chairs (Anika · before event)
-- Prepare refreshments (Anika · before event)
-- Test audio/video (Anika · before event)
-
-[Approve plan] [Cancel]
-```
-
-## 🔒 Security and Approval Model
-
-### Approval Flow
-1. **Draft**: Create a plan with proposed actions (no changes made)
-2. **Review**: User reviews the plan, conflict warnings, and reasoning
-3. **Approve**: User approves the plan, server issues a time-bound token
-4. **Execute**: Plan is executed with the token, changes are applied
-5. **Audit**: All actions are logged in the action history
-
-### Safety Rules
-- Event plan actions are not applied until explicitly approved
-- Direct task, shopping, and reminder requests apply immediately after validation
-- Execution tokens are bound to specific plan versions
-- Expired or invalid tokens are rejected
-- All actions are logged for audit
-- Duplicate items are detected and skipped
-- Past-time reminders are rejected
-- Conflicts are detected and shown before approval
-
-## 🧪 Testing
-
-```bash
-# Run unit tests
-npm test
-
-# Run ESLint
-npm run lint
-
-# Type checking
-npm run typecheck
-
-# MCP endpoint qualification check (requires `npm run dev` in another terminal)
-npm run mcp:smoke
-```
-
-## Alexa+ Qualification Demo
-
-HomeFlow uses the self-hosted MCP server track. Start the web app and server with `npm run dev`; the MCP endpoint is `http://127.0.0.1:3001/mcp`. The server uses `@modelcontextprotocol/sdk` 1.32.1 and negotiates Streamable HTTP protocol `2025-11-25`. Run `npm run mcp:smoke` to verify the negotiated version and required household, planning, and approval tools.
-
-The web app also provides the simulated-experience path; its source code and working workflows are included in this repository.
-
-## Logging In
-
-Production uses one shared household password configured as `HOMEFLOW_ACCESS_PASSWORD`; there is no username, email account, or per-person login. Local development (`npm run dev`) bypasses the production login and opens the dashboard directly. If you do not know the deployed password, replace `HOMEFLOW_ACCESS_PASSWORD` in the Vercel project's Environment Variables with a new value of at least 16 characters, then redeploy. The CLI reports saved values as encrypted and does not reveal them. Keep the replacement password private.
-
-## Production Deployment Status
-
-This repository is a self-hosted, single-household deployment—not a multi-tenant SaaS. In production, set `HOMEFLOW_ACCESS_PASSWORD` (at least 16 characters), `HOMEFLOW_SESSION_SECRET` (at least 32 characters), and `MCP_AUTH_TOKEN`. Use a TLS reverse proxy and inject these as deployment secrets; never commit them. The web app uses an HttpOnly, Secure, SameSite session cookie and the MCP endpoint requires bearer authentication. Configure the reverse proxy to overwrite client-supplied `X-Real-IP`/`X-Forwarded-For`; the included login throttle is process-local and must be replaced with a shared limiter for multiple instances. Before serving multiple homes, add individual accounts, tenant-scoped authorization/storage, managed relational persistence, backups/migrations, and a production deployment/monitoring pipeline. SQLite remains single-node and household state is not tenant-isolated.
-
-Generate random secrets locally without sending them anywhere:
-
-```powershell
-node -e "console.log(require('node:crypto').randomBytes(32).toString('base64url'))"
-```
-
-### Vercel (authorized single-household demo)
-
-The Next.js app includes a serverless MCP adapter at `/api/mcp` using the MCP SDK's Web-standard Streamable HTTP transport. When `VERCEL_URL` is present and `MCP_URL` is omitted, the web app calls that same deployment's `/api/mcp` route. The long-running Express server in `server/index.ts` is for local development only; it does not listen when the module is imported by Next.js or Vercel.
-
-Configure these as Vercel project secrets (never commit them):
-
-- `HOMEFLOW_ACCESS_PASSWORD` (at least 16 characters)
-- `HOMEFLOW_SESSION_SECRET` (at least 32 random characters)
-- `MCP_AUTH_TOKEN` (random bearer token for `/api/mcp`)
-- `HOMEFLOW_BEDROCK_ENABLED=false`
-- omit `MCP_URL`
-
-**This is a single-household demo, not a product for thousands of homes.** On Vercel, SQLite is stored under `/tmp` (`tmpdir()` when `VERCEL=1`). That file is ephemeral, isolated per serverless instance, and not shared. Household data can reset across invocations. Durable multi-tenant storage, per-home authorization, backups, and a shared rate limiter are out of scope.
-
-**Live demo:** [https://homeflow-taupe-theta.vercel.app](https://homeflow-taupe-theta.vercel.app)
-
-The production deployment passed the login, household, natural-language task and shopping, task completion, plan draft/approval/execution, logout, reset protection, MCP protocol/tools, and responsive page checks. Its SQLite data remains ephemeral and may reset across serverless instances.
-
-## 📊 Project Structure
-
-```
-homeflow/
-├── app/                      # Next.js App Router
-│   ├── page.tsx             # Main dashboard UI
-│   ├── layout.tsx           # Root layout
-│   ├── globals.css          # Global styles
-│   └── api/                 # API routes
-│       ├── household/       # Household context endpoint
-│       ├── mcp/             # Serverless MCP Streamable HTTP adapter
-│       ├── message/         # Message parsing endpoint
-│       └── plan/            # Plan lifecycle endpoints
-├── lib/                     # Core business logic
-│   ├── types.ts             # TypeScript type definitions
-│   ├── store.ts             # SQLite data store
-│   ├── planner.ts           # Natural language parser
-│   ├── mcp-client.ts        # MCP client wrapper
-│   └── aws/                 # AWS integrations
-│       └── bedrock.ts       # Optional Amazon Bedrock intent extraction
-├── server/                  # MCP Server
-│   └── index.ts             # Express + MCP SDK server
-├── skills/                  # Agent Skills
-│   └── household-operations/
-│       └── SKILL.md         # Household operations skill
-├── tests/                   # Test files
-├── data/                    # SQLite database (created at runtime)
-├── .env.example             # Environment template
-├── package.json             # Dependencies
-└── README.md                # This file
-```
-
-## 🌐 AWS Integration
-
-### Amazon Bedrock
-Bedrock is disabled by default and is not needed for the Alexa+ MCP or simulated-experience tracks. Setting `HOMEFLOW_BEDROCK_ENABLED=true` explicitly enables `InvokeModel` and may incur AWS charges. The no-cost demo uses the deterministic local parser.
-
-No AWS credentials, IAM Identity Center, or cloud account setup is needed for the local demo. Do not set `HOMEFLOW_BEDROCK_ENABLED=true` unless you intentionally want to use AWS and have reviewed its pricing.
-
-## 🎨 Customization
-
-### Adding New Event Types
-Edit `lib/store.ts` and add new event types to the `getShoppingItemsForEvent` and `getTasksForEvent` methods.
-
-### Modifying Assignment Logic
-Edit the `assignTaskToMember` method in `lib/store.ts` to customize task assignment rules.
-
-### Adding New Preferences
-Add new preference categories in `lib/types.ts` and update the assignment logic accordingly.
-
-## 🚧 Known Limitations
-
-- Reminders are stored locally, not delivered
-- Shopping items are not automatically purchased
-- Member availability is not actively managed (preference-based only)
-- Conflict detection is time-based (doesn't check member schedules)
-- Event end times are estimated (3 hours by default)
-- Vercel demo data is ephemeral `/tmp` SQLite and is not shared across serverless instances
-
-## 🔮 Future Roadmap
-
-- [ ] Real reminder delivery (email, SMS, push notifications)
-- [ ] Integration with shopping services
-- [ ] Calendar synchronization
-- [ ] Member availability management
-- [ ] Advanced conflict resolution suggestions
-- [ ] Multi-household support
-- [ ] Mobile app
-- [ ] Voice integration (Alexa)
-- [ ] Smart home device integration
-- [ ] Expense tracking
-
-## 📄 License
-
-MIT. See [LICENSE](LICENSE).
-
-## Contributors
-
-Vansh Dixit — project owner and maintainer.
-
-## 🤝 Contributing
-
-Contributions are welcome. Read [CONTRIBUTING.md](CONTRIBUTING.md) for setup and checks, and [SECURITY.md](SECURITY.md) to report vulnerabilities privately.
+</div>
 
 ---
 
-Built for the Alexa+ hackathon.
+## Overview
+
+HomeFlow is a single-household coordination demo built for the Alexa+ hackathon. A natural-language interface connects a Next.js dashboard to household data and MCP tools. Event plans are drafted with context, preferences, and conflict checks; a person must approve a plan before its actions are applied.
+
+The application runs locally with SQLite and deterministic planning. Bedrock is optional and disabled by default. The hosted demo uses ephemeral SQLite under Vercel `/tmp`; data can reset and is not shared reliably across serverless instances. HomeFlow is not a durable or multi-tenant service.
+
+## Features
+
+- **Conversational workflows:** create household tasks, add shopping items, schedule reminders, and request event plans.
+- **Reviewable event plans:** inspect proposed actions and conflicts; approve, execute, or cancel a plan.
+- **Household context:** use member preferences, dietary restrictions, inventory, tasks, and events to shape plans.
+- **Task and list management:** update or complete tasks, detect duplicates, and remove specific shopping items.
+- **MCP tools:** use the same household capabilities through Streamable HTTP.
+- **Simple local setup:** SQLite and deterministic planning work without cloud credentials.
+- **Production access control:** a shared household password and signed session protect the hosted dashboard; MCP requests use bearer authentication.
+
+## Architecture
+
+```mermaid
+flowchart LR
+    Person[Household member] --> UI[Next.js dashboard]
+    UI --> API[Next.js API routes]
+    API --> Client[MCP client]
+    Client -->|Local development| Express[Express MCP server]
+    Client -->|Vercel| Adapter[Serverless /api/mcp adapter]
+    Express --> Store[(SQLite household store)]
+    Adapter --> Store
+    Store --> Planner[Deterministic planner]
+    Planner -. Optional, disabled by default .-> Bedrock[Amazon Bedrock]
+```
+
+## Tech stack
+
+| Area | Technology |
+| --- | --- |
+| Web application | Next.js 16, React 19, TypeScript |
+| API and MCP | Next.js Route Handlers, Express 5, MCP TypeScript SDK, Streamable HTTP |
+| Data | SQLite via Node’s built-in SQLite API |
+| Validation | Zod 4 |
+| Optional AI | Amazon Bedrock Runtime; disabled by default |
+| Runtime and package manager | Node.js 24+, npm |
+| Hosting | Vercel demo; local self-hosting supported |
+
+## Demo
+
+<div align="center">
+
+[![Open the live HomeFlow demo](https://img.shields.io/badge/▶%20Open%20HomeFlow%20Live%20Demo-https%3A%2F%2Fhomeflow--taupe--theta.vercel.app-207252?style=for-the-badge)](https://homeflow-taupe-theta.vercel.app)
+
+**[Launch HomeFlow](https://homeflow-taupe-theta.vercel.app)** · [Source code](https://github.com/vanshdixit1/HomeFlow)
+
+</div>
+
+The hosted demo uses one shared household password; it has no username or individual accounts. Local development bypasses the production login. If you do not have the hosted password, the project owner can rotate `HOMEFLOW_ACCESS_PASSWORD` in Vercel and redeploy. Saved Vercel values are encrypted and cannot be retrieved from the CLI.
+
+> **Demo data is temporary.** Vercel stores SQLite in ephemeral, instance-local `/tmp`. State may reset between serverless invocations. Do not use the demo for important household records.
+
+## Screenshots
+
+Replace these illustrative placeholders with captured product images when available.
+
+| Dashboard | Planning and approval walkthrough |
+| --- | --- |
+| ![Dashboard screenshot placeholder](docs/screenshots/dashboard-placeholder.svg) | ![Demo walkthrough GIF placeholder](docs/screenshots/walkthrough-placeholder.svg) |
+
+## Installation
+
+Requirements: Node.js 24 or newer and npm.
+
+```bash
+git clone https://github.com/vanshdixit1/HomeFlow.git
+cd HomeFlow
+npm ci
+```
+
+No AWS account or credentials are required for local development. The default database is created at `data/homeflow.sqlite`.
+
+## Local development
+
+```bash
+npm run dev
+```
+
+This starts the dashboard at [http://localhost:3000](http://localhost:3000) and the local MCP server at [http://127.0.0.1:3001/mcp](http://127.0.0.1:3001/mcp). The local dashboard opens without the production password gate.
+
+To check MCP after startup, use a second terminal:
+
+```bash
+npm run mcp:smoke
+```
+
+Optional settings can be supplied through the shell before starting the app. For example, in PowerShell:
+
+```powershell
+$env:HOMEFLOW_BEDROCK_ENABLED = 'false'
+$env:HOMEFLOW_DB = 'C:\path\to\homeflow.sqlite'
+npm run dev
+```
+
+## Environment variables
+
+Local defaults are sufficient for the demo. Configure production secrets in the hosting provider’s encrypted environment settings; never commit them.
+
+| Variable | Required | Purpose |
+| --- | --- | --- |
+| `HOMEFLOW_ACCESS_PASSWORD` | Production | Shared dashboard password; use at least 16 characters. |
+| `HOMEFLOW_SESSION_SECRET` | Production | Random signing secret for sessions; use at least 32 characters. |
+| `MCP_AUTH_TOKEN` | Production | Bearer token required by the MCP endpoint. |
+| `HOMEFLOW_BEDROCK_ENABLED` | No | Defaults to `false`; set to `true` only when Bedrock is intentionally configured. AWS usage may incur charges. |
+| `MCP_URL` | No | MCP endpoint override. Local default is `http://127.0.0.1:3001/mcp`; omit on Vercel to use the same deployment’s `/api/mcp`. |
+| `MCP_HOST` / `MCP_PORT` | No | Local MCP bind address and port; defaults are `127.0.0.1` and `3001`. |
+| `HOMEFLOW_DB` | No | SQLite file path; defaults to `data/homeflow.sqlite` locally and `/tmp` on Vercel. |
+| `AWS_REGION` / `BEDROCK_MODEL_ID` | Bedrock only | Region and model for optional Bedrock intent extraction. |
+
+Generate a random session secret locally without sending it to a service:
+
+```bash
+node -e "process.stdout.write(require('node:crypto').randomBytes(32).toString('base64url') + '\n')"
+```
+
+## Deployment
+
+The live demo is deployed on Vercel. To deploy your own instance:
+
+1. Import the repository into Vercel or link it with the Vercel CLI.
+2. Configure `HOMEFLOW_ACCESS_PASSWORD`, `HOMEFLOW_SESSION_SECRET`, `MCP_AUTH_TOKEN`, and `HOMEFLOW_BEDROCK_ENABLED=false` as encrypted project environment variables.
+3. Leave `MCP_URL` unset so the web app calls the deployment’s `/api/mcp` endpoint.
+4. Deploy with the Vercel dashboard or `vercel --prod`.
+
+Vercel’s filesystem is not durable or shared between function instances. For persistent use, replace the SQLite storage with a managed database and add tenant isolation, migrations, backups, and shared rate limiting. Local self-hosting can use a persistent SQLite file behind HTTPS and a correctly configured trusted reverse proxy.
+
+## MCP architecture
+
+The local Express server in `server/index.ts` registers the household tools and exposes Streamable HTTP at `/mcp`. The web application’s MCP client uses that service locally. On Vercel, the Web-standard adapter in `app/api/mcp/route.ts` exposes the same tools at `/api/mcp` without a long-running server.
+
+MCP calls cover household context, task and shopping updates, reminders, events, preferences, and the plan lifecycle. Plan execution requires a valid, time-bound approval token for the exact plan version. The hosted endpoint requires `Authorization: Bearer <MCP_AUTH_TOKEN>`.
+
+## API overview
+
+| Method | Route | Purpose |
+| --- | --- | --- |
+| `GET` | `/api/household` | Read household context; requires a production session. |
+| `POST` | `/api/message` | Handle a natural-language request. |
+| `POST` | `/api/task/status` | Complete or reopen a task. |
+| `POST` | `/api/plan/approve` | Approve a plan version. |
+| `POST` | `/api/plan/execute` | Execute an approved plan with its token. |
+| `POST` | `/api/plan/cancel` | Cancel a plan. |
+| `POST` | `/api/plan/reset` | Reset local demo data; disabled in production. |
+| `POST` | `/api/auth/login` | Create a production session. |
+| `POST` | `/api/auth/logout` | End the current session. |
+| `GET`, `POST`, `DELETE` | `/api/mcp` | Serverless MCP Streamable HTTP endpoint. |
+
+## Project structure
+
+```text
+app/                 Next.js dashboard and API routes
+  api/               Authentication, household, plans, tasks, messages, MCP
+lib/                 Store, planner, auth, types, MCP client, optional Bedrock
+server/              Local Express MCP server
+skills/              Household operations guidance
+scripts/             MCP smoke test and deployed E2E verification
+tests/               Unit and route tests
+docs/screenshots/     README image placeholders
+```
+
+## Testing and quality checks
+
+```bash
+npm run lint
+npm run typecheck
+npm test
+npm run build
+npm run mcp:smoke   # requires the local MCP server from npm run dev
+npm audit --audit-level=high
+```
+
+The deployment E2E suite can be run against an authorized deployment when `BASE_URL`, `HOMEFLOW_ACCESS_PASSWORD`, and `MCP_AUTH_TOKEN` are available in the process environment or an ignored `.env.local` file:
+
+```powershell
+$env:BASE_URL = 'https://your-deployment.vercel.app'
+node scripts/test-deployment-e2e.mjs
+```
+
+The suite exercises login, household reads, task and shopping flows, plan approval/execution, logout, reset protection, MCP authentication/tools, and the landing page. It changes demo data; use only on a test deployment.
+
+## Security considerations
+
+- Production requires a strong shared password, a random session secret, and an MCP bearer token. Rotate any exposed credential.
+- Sessions use secure, HttpOnly cookies. MCP access is authenticated separately.
+- Local development bypasses the production session gate; do not expose the development server publicly.
+- Login throttling is process-local and is not sufficient for a multi-instance service.
+- Trust proxy headers only when the proxy overwrites client-supplied forwarding headers.
+- Do not enable Bedrock unless you intend to send requests to AWS and accept possible charges.
+- The hosted demo is single-household and ephemeral. Do not enter sensitive personal information or rely on it for durable records.
+
+See [SECURITY.md](SECURITY.md) for responsible vulnerability reporting.
+
+## Roadmap
+
+- Durable database storage, migrations, and backups
+- Household accounts, tenant isolation, and shared rate limiting
+- Reminder delivery through email, SMS, or push
+- Calendar synchronization and member availability
+- Shopping integrations and expense tracking
+- Voice and smart-home integrations
+
+## Contributing
+
+Contributions are welcome. Start with [CONTRIBUTING.md](CONTRIBUTING.md), run the checks above, and include regression tests for behavior changes. Please keep secrets and household data out of issues and pull requests.
+
+## License
+
+HomeFlow is released under the [MIT License](LICENSE).

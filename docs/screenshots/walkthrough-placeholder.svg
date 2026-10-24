@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 675" role="img" aria-labelledby="title desc">
+  <title id="title">HomeFlow demo walkthrough placeholder</title>
+  <desc id="desc">Illustrative placeholder for a future animated walkthrough of drafting, approving, and executing a plan.</desc>
+  <defs>
+    <linearGradient id="background" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#183c2e"/><stop offset="1" stop-color="#23694b"/></linearGradient>
+  </defs>
+  <rect width="1200" height="675" fill="url(#background)"/>
+  <text x="600" y="180" text-anchor="middle" font-family="Arial,sans-serif" font-size="34" font-weight="700" fill="#fff">Plan review walkthrough</text>
+  <text x="600" y="226" text-anchor="middle" font-family="Arial,sans-serif" font-size="20" fill="#d7e9de">Animated demo placeholder · replace with a short GIF</text>
+  <g font-family="Arial,sans-serif">
+    <g transform="translate(110 300)"><rect width="270" height="205" rx="20" fill="#fff"/><circle cx="45" cy="48" r="22" fill="#e9f3ec"/><text x="45" y="56" text-anchor="middle" font-size="22" font-weight="700" fill="#246b4e">1</text><text x="82" y="55" font-size="22" font-weight="700" fill="#173d2e">Draft</text><text x="32" y="105" font-size="17" fill="#587064">Describe an event and</text><text x="32" y="133" font-size="17" fill="#587064">review suggested actions.</text><rect x="32" y="163" width="206" height="12" rx="6" fill="#dce9df"/></g>
+    <path d="M402 400h84" stroke="#c5e0cf" stroke-width="5" stroke-linecap="round"/><path d="m474 388 14 12-14 12" fill="none" stroke="#c5e0cf" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
+    <g transform="translate(465 300)"><rect width="270" height="205" rx="20" fill="#fff"/><circle cx="45" cy="48" r="22" fill="#e9f3ec"/><text x="45" y="56" text-anchor="middle" font-size="22" font-weight="700" fill="#246b4e">2</text><text x="82" y="55" font-size="22" font-weight="700" fill="#173d2e">Approve</text><text x="32" y="105" font-size="17" fill="#587064">Check preferences and</text><text x="32" y="133" font-size="17" fill="#587064">conflicts before approval.</text><rect x="32" y="163" width="206" height="12" rx="6" fill="#dce9df"/></g>
+    <path d="M757 400h84" stroke="#c5e0cf" stroke-width="5" stroke-linecap="round"/><path d="m829 388 14 12-14 12" fill="none" stroke="#c5e0cf" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
+    <g transform="translate(820 300)"><rect width="270" height="205" rx="20" fill="#fff"/><circle cx="45" cy="48" r="22" fill="#e9f3ec"/><text x="45" y="56" text-anchor="middle" font-size="22" font-weight="700" fill="#246b4e">3</text><text x="82" y="55" font-size="22" font-weight="700" fill="#173d2e">Execute</text><text x="32" y="105" font-size="17" fill="#587064">Apply approved actions</text><text x="32" y="133" font-size="17" fill="#587064">to household lists.</text><rect x="32" y="163" width="206" height="12" rx="6" fill="#dce9df"/></g>
+  </g>
+</svg>

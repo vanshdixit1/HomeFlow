@@ -2,6 +2,8 @@
 
 Thanks for considering a contribution to HomeFlow.
 
+See the [live demo](https://homeflow-taupe-theta.vercel.app) and [project overview](README.md) before making a change.
+
 ## Development setup
 
 - Node.js 24 or newer
